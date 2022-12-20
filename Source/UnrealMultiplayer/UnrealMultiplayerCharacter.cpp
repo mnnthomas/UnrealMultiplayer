@@ -10,12 +10,15 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "OnlineSubsystem.h"
-#include "Interfaces/OnlineSessionInterface.h"
+#include "OnlineSessionSettings.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AUnrealMultiplayerCharacter
 
-AUnrealMultiplayerCharacter::AUnrealMultiplayerCharacter()
+AUnrealMultiplayerCharacter::AUnrealMultiplayerCharacter():
+	CreateSessionCompleteDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &AUnrealMultiplayerCharacter::OnCreateSessionComplete)),
+	FindSessionsCompleteDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::OnFindSessionsComplete)),
+	JoinSessionCompleteDelegate(FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -79,6 +82,113 @@ void AUnrealMultiplayerCharacter::BeginPlay()
 		}
 	}
 }
+
+#pragma region OnlineSubsystem
+void AUnrealMultiplayerCharacter::CreateGameSession()
+{ 
+	//Called when pressing a key
+	if (!OnlineSessionInterface.IsValid())
+		return;
+
+	 auto ExistingSession = OnlineSessionInterface->GetNamedSession(NAME_GameSession);
+	 if (ExistingSession != nullptr)
+		 OnlineSessionInterface->DestroySession(NAME_GameSession);
+
+	 TSharedPtr<FOnlineSessionSettings> SessionSettings = MakeShareable(new FOnlineSessionSettings());
+	 SessionSettings->bIsLANMatch = false;
+	 SessionSettings->NumPublicConnections = 4;
+	 SessionSettings->bAllowJoinInProgress = true;
+	 SessionSettings->bAllowJoinViaPresence = true;
+	 SessionSettings->bShouldAdvertise = true;
+	 SessionSettings->bUsesPresence = true;
+	 SessionSettings->bUseLobbiesIfAvailable = true;
+
+	 const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+
+	 OnlineSessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
+	 OnlineSessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *SessionSettings);
+
+}
+void AUnrealMultiplayerCharacter::JoinGameSession()
+{
+	//FindGameSession
+	if (!OnlineSessionInterface.IsValid())
+		return;
+
+	SessionSearch = MakeShareable(new FOnlineSessionSearch());
+	SessionSearch->MaxSearchResults = 10000;
+	SessionSearch->bIsLanQuery = false;
+	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+
+	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
+	OnlineSessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef());
+
+}
+
+void AUnrealMultiplayerCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
+{
+	if (bWasSuccessful)
+	{
+		if (GEngine)
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, FString::Printf(TEXT("bWasSuccessful Successful : %s"), *SessionName.ToString()));
+
+		UWorld* World = GetWorld();
+		if (World)
+		{
+			World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby?listen"));
+		}
+	}
+	else
+	{
+		if (GEngine)
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Red, FString::Printf(TEXT("bWasSuccessful failed : %d"), bWasSuccessful));
+	}
+}
+
+void AUnrealMultiplayerCharacter::OnFindSessionsComplete(bool bWasSuccessful)
+{
+
+	if (!OnlineSessionInterface.IsValid())
+		return;
+
+	for (auto Result : SessionSearch->SearchResults)
+	{
+		FString Id = Result.GetSessionIdStr();
+		FString User = Result.Session.OwningUserName;
+
+		if (GEngine)
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Blue, FString::Printf(TEXT("OnFindSessionsComplete - ID : %s - User : %s"), *Id, *User));
+
+		OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
+
+		const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+		OnlineSessionInterface->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, Result);
+	}
+}
+
+void AUnrealMultiplayerCharacter::OnJoinSessionComplete(FName Sessionname, EOnJoinSessionCompleteResult::Type Result)
+{
+	if (!OnlineSessionInterface.IsValid())
+		return;
+
+	FString Address;
+	if (OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession, Address))
+	{
+		if (GEngine)
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("Connect Address  : %s"), *Address));
+
+		APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
+		if (PlayerController)
+		{
+			PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
+		}
+
+	}
+}
+
+#pragma endregion OnlineSubsystem
 
 //////////////////////////////////////////////////////////////////////////
 // Input

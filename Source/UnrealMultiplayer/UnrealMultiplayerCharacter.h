@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
+#include "Interfaces/OnlineSessionInterface.h"
 #include "UnrealMultiplayerCharacter.generated.h"
 
 
@@ -67,7 +68,25 @@ public:
 public:
 
 	//Pointer to online session interaface
-	TSharedPtr<class IOnlineSession, ESPMode::ThreadSafe> OnlineSessionInterface;
+	IOnlineSessionPtr OnlineSessionInterface;
+
+protected:
+	UFUNCTION(BlueprintCallable)
+		void CreateGameSession();
+
+	UFUNCTION(BlueprintCallable)
+		void JoinGameSession();
+
+	void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);
+	void OnFindSessionsComplete(bool bWasSuccessful);
+	void OnJoinSessionComplete(FName Sessionname, EOnJoinSessionCompleteResult::Type Result);
+
+private:
+	FOnCreateSessionCompleteDelegate CreateSessionCompleteDelegate;
+	FOnFindSessionsCompleteDelegate	FindSessionsCompleteDelegate;
+	FOnJoinSessionCompleteDelegate JoinSessionCompleteDelegate;
+
+	TSharedPtr<FOnlineSessionSearch> SessionSearch;
 
 #pragma endregion OnlineSubsystem
 };
