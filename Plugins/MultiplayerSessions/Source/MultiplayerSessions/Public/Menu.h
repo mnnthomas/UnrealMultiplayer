@@ -17,7 +17,7 @@ class MULTIPLAYERSESSIONS_API UMenu : public UUserWidget
 	
 public:
 	UFUNCTION(BlueprintCallable)
-		void MenuSetup(int32 NumberOfPublicConnections = 4, FString TypeOfMatch = FString(TEXT("FFA")));
+		void MenuSetup(int32 NumberOfPublicConnections = 4, FString TypeOfMatch = FString(TEXT("FFA")), FString LobbyPath = FString(TEXT("/Game/ThirdPerson/Maps/Lobby")));
 
 protected:
 	virtual bool Initialize() override;
@@ -49,4 +49,5 @@ private:
 	class UMultiplayerSessionsSubsystem* MultiplayerSessionsSubsystem;
 	int32 NumPublicConnection{4};
 	FString MatchType{TEXT("FFA")};
+	FString PathToLobby{ TEXT("") };
 };
